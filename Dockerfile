@@ -17,9 +17,8 @@ WORKDIR /app
 # Copy published app
 COPY --from=build /app/publish .
 
-# Ensure ML model is copied (if exists)
+# Copy ML model if exists (optional - copy won't fail if missing)
 COPY ["ML/model.onnx", "ML/model.onnx"]
-# Note: Add your model.onnx to ML/ folder before deploying
 
 # Expose port (Render sets PORT env var)
 EXPOSE 8080

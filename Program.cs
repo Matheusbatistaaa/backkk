@@ -77,16 +77,23 @@ builder.Services.AddControllers();
 builder.Services.AddSingleton<ImagePreprocessingService>();
 builder.Services.AddSingleton(sp =>
 {
-    var modelPath = Path.Combine(AppContext.BaseDirectory, "ML", "model.onnx");
-    if (!File.Exists(modelPath))
+    var baseDir = AppContext.BaseDirectory;
+    var physioPath = Path.Combine(baseDir, "ML", "perceptai_physio.onnx");
+    var emotionPath = Path.Combine(baseDir, "ML", "perceptai_emotion.onnx");
+
+    if (!File.Exists(physioPath))
     {
-        modelPath = Path.Combine(Directory.GetCurrentDirectory(), "ML", "model.onnx");
+        physioPath = Path.Combine(Directory.GetCurrentDirectory(), "ML", "perceptai_physio.onnx");
     }
-    if (!File.Exists(modelPath))
+    if (!File.Exists(emotionPath))
     {
-        throw new FileNotFoundException($"O modelo ONNX não foi encontrado em '{modelPath}'.");
+        emotionPath = Path.Combine(Directory.GetCurrentDirectory(), "ML", "perceptai_emotion.onnx");
     }
-    return new ModelLoader(modelPath);
+    if (!File.Exists(physioPath) || !File.Exists(emotionPath))
+    {
+        throw new FileNotFoundException($"ONNX models not found. Physio: '{physioPath}', Emotion: '{emotionPath}'.");
+    }
+    return new ModelLoader(physioPath, emotionPath);
 });
 builder.Services.AddSingleton<EmotionDetectionService>();
 builder.Services.AddScoped<SupabaseService>();
@@ -97,14 +104,13 @@ builder.Services.AddScoped<SupabaseService>();
 builder.Services.AddHttpClient("supabase", (sp, client) =>
 {
     var settings = sp.GetRequiredService<IOptions<SupabaseSettings>>().Value;
-    if (string.IsNullOrWhiteSpace(settings.Url))
-        throw new InvalidOperationException("SupabaseSettings:Url não configurado.");
-    if (string.IsNullOrWhiteSpace(settings.ServiceRoleKey))
-        throw new InvalidOperationException("SupabaseSettings:ServiceRoleKey não configurado.");
-    client.BaseAddress = new Uri($"{settings.Url.TrimEnd('/')}/rest/v1/");
-    client.DefaultRequestHeaders.Add("apikey", settings.ServiceRoleKey);
-    client.DefaultRequestHeaders.Add("Authorization", $"Bearer {settings.ServiceRoleKey}");
-    client.DefaultRequestHeaders.Add("Accept", "application/json");
+    if (!string.IsNullOrWhiteSpace(settings.Url) && !string.IsNullOrWhiteSpace(settings.ServiceRoleKey))
+    {
+        client.BaseAddress = new Uri($"{settings.Url.TrimEnd('/')}/rest/v1/");
+        client.DefaultRequestHeaders.Add("apikey", settings.ServiceRoleKey);
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {settings.ServiceRoleKey}");
+        client.DefaultRequestHeaders.Add("Accept", "application/json");
+    }
 });
 // Debug statement removed
 var app = builder.Build();
@@ -125,26 +131,64 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 // app.UseHttpsRedirection(); // Disabled for local development
 app.UseAuthorization();
-        // Debug endpoint – runs a single local image through the full pipeline
-        app.MapGet("/debug/test", async (Microsoft.AspNetCore.Http.HttpContext ctx) =>
+
+// Debug endpoint – runs a single local image through the full pipeline
+app.MapGet("/debug/test", async (Microsoft.AspNetCore.Http.HttpContext ctx) =>
+{
+    var imgPath = Path.Combine(Directory.GetCurrentDirectory(), "test-images", "example.jpg");
+    if (!File.Exists(imgPath))
+        return Results.NotFound("Test image not found");
+
+    var imgBytes = await File.ReadAllBytesAsync(imgPath);
+    var base64 = Convert.ToBase64String(imgBytes);
+
+    var preprocessor = ctx.RequestServices.GetRequiredService<ImagePreprocessingService>();
+    var normalized = preprocessor.PreprocessBase64Image(base64);
+
+    var detector = ctx.RequestServices.GetRequiredService<EmotionDetectionService>();
+    var (emotion, confidence) = detector.DetectEmotion(normalized);
+
+    return Results.Json(new { emotion, confidence });
+});
+
+// Test AI endpoint – accepts base64 image and returns full analysis
+app.MapPost("/api/test-ai", async (Microsoft.AspNetCore.Http.HttpContext ctx) =>
+{
+    using var reader = new System.IO.StreamReader(ctx.Request.Body);
+    var body = await reader.ReadToEndAsync();
+    var json = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(body);
+    if (!json.TryGetProperty("image_base64", out var imgProp) || imgProp.ValueKind != System.Text.Json.JsonValueKind.String)
+        return Results.BadRequest(new { message = "image_base64 required" });
+
+    var base64 = imgProp.GetString();
+    if (string.IsNullOrWhiteSpace(base64))
+        return Results.BadRequest(new { message = "image_base64 required" });
+
+    var preprocessor = ctx.RequestServices.GetRequiredService<ImagePreprocessingService>();
+    var detector = ctx.RequestServices.GetRequiredService<EmotionDetectionService>();
+
+    try
+    {
+        float[] normalized = preprocessor.PreprocessBase64Image(base64!);
+
+        var allProbs = detector.GetAllProbabilities(normalized);
+        var result = detector.AnalyzeDualState(normalized);
+
+        return Results.Json(new
         {
-            var imgPath = Path.Combine(Directory.GetCurrentDirectory(), "test-images", "example.jpg");
-            if (!File.Exists(imgPath))
-                return Results.NotFound("Test image not found");
-
-            var imgBytes = await File.ReadAllBytesAsync(imgPath);
-            var base64 = Convert.ToBase64String(imgBytes);
-
-            var preprocessor = ctx.RequestServices.GetRequiredService<ImagePreprocessingService>();
-            var normalized = preprocessor.PreprocessBase64Image(base64);
-
-            var detector = ctx.RequestServices.GetRequiredService<EmotionDetectionService>();
-            var (emotion, confidence) = detector.DetectEmotion(normalized);
-
-            return Results.Json(new { emotion, confidence });
+            estadoFisiologico = result.EstadoFisiologico,
+            confiancaFisiologica = result.ConfiancaFisiologica,
+            estadoEmocional = result.EstadoEmocional,
+            confiancaEmocional = result.ConfiancaEmocional,
+            allProbabilities = allProbs
         });
+    }
+    catch (Exception ex)
+    {
+        return Results.BadRequest(new { message = ex.Message });
+    }
+});
 
-// Debug statement removed
 app.MapControllers();
 app.Run();
 
