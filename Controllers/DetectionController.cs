@@ -25,25 +25,23 @@ namespace PerceptAI.API.Controllers
             _preprocessingService = preprocessingService;
             _detectionService = detectionService;
             _supabaseService = supabaseService;
-            // Carrega o threshold padrão (75%) do appsettings.json
+            // Threshold usado apenas para o fluxo legado (app mobile).
             _threshold = configuration.GetValue<double>("DetectionSettings:Threshold", 0.75);
         }
 
         /// <summary>
-        /// Recebe uma imagem em Base64 e o ID do paciente, executa a inferência ONNX
-        /// e persiste a detecção no Supabase (caso a confiança supere o threshold).
+        /// Recebe uma imagem em Base64 e o ID do paciente/internação, executa o pipeline
+        /// (landmarks -> métricas -> regras) e persiste o resultado no Supabase.
         /// </summary>
         [HttpPost("detect")]
         public async Task<IActionResult> Detect([FromBody] DetectionRequest request)
         {
-            // Validação básica da imagem
             if (request == null || string.IsNullOrWhiteSpace(request.Image))
             {
                 return BadRequest(new { message = "Corpo de requisição inválido ou imagem vazia." });
             }
 
-            // Exige PatientId (fluxo legado) OU InternacaoId (fluxo web)
-            bool temPatient    = !string.IsNullOrWhiteSpace(request.PatientId);
+            bool temPatient = !string.IsNullOrWhiteSpace(request.PatientId);
             bool temInternacao = !string.IsNullOrWhiteSpace(request.InternacaoId);
 
             if (!temPatient && !temInternacao)
@@ -53,33 +51,34 @@ namespace PerceptAI.API.Controllers
 
             try
             {
-                // Pré-processamento da imagem Base64
-                float[] normalized = _preprocessingService.PreprocessBase64Image(request.Image);
+                var image = _preprocessingService.LoadBase64Image(request.Image);
+                var result = _detectionService.AnalyzeDualState(image);
 
-                // Inferência do modelo
-                var (emotion, confidence) = _detectionService.DetectEmotion(normalized);
+                string emotion = result.EstadoEmocional
+                    ?? (result.EstadoFisiologico == "dormindo" ? "dormindo" : "neutro");
 
-                // Monta a resposta
                 var response = new DetectionResponse
                 {
                     Emotion = emotion,
-                    Confidence = confidence,
-                    Timestamp = DateTime.UtcNow
+                    Confidence = result.PrimaryConfidence,
+                    Timestamp = DateTime.UtcNow,
+                    EstadoFisiologico = result.EstadoFisiologico,
+                    EstadoEmocional = result.EstadoEmocional,
+                    ConfiancaFisiologica = result.ConfiancaFisiologica,
+                    ConfiancaEmocional = result.ConfiancaEmocional,
+                    Fonte = result.Fonte,
+                    Metricas = result.Metricas,
+                    Regras = result.Regras,
+                    Observacoes = result.Observacoes
                 };
 
-                // Persiste no Supabase dependendo do fluxo:
                 if (temInternacao)
                 {
-                    // Fluxo web: salva em expressoes_faciais
-                    await _supabaseService.SaveExpressaoAsync(
-                        request.InternacaoId!,
-                        emotion,
-                        confidence);
+                    await _supabaseService.SaveExpressaoAsync(request.InternacaoId!, emotion, response.Confidence);
                 }
-                else if (temPatient && confidence >= _threshold)
+                else if (temPatient && response.Confidence >= _threshold)
                 {
-                    // Fluxo legado do app mobile: salva em detections
-                    await _supabaseService.SaveDetectionAsync(request.PatientId, emotion, confidence, response.Timestamp);
+                    await _supabaseService.SaveDetectionAsync(request.PatientId, emotion, response.Confidence, response.Timestamp);
                 }
 
                 return Ok(response);
@@ -88,11 +87,25 @@ namespace PerceptAI.API.Controllers
             {
                 return BadRequest(new { message = "Formato Base64 da imagem é inválido." });
             }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(422, new { message = ex.Message });
+            }
             catch (Exception)
             {
-                // Erro interno inesperado
                 return StatusCode(500, new { message = "Erro interno ao processar a detecção." });
             }
+        }
+
+        [HttpGet("health")]
+        public IActionResult Health()
+        {
+            return Ok(new
+            {
+                status = "ok",
+                pipeline = _detectionService.LandmarkPipelineAvailable ? "landmarks" : "classificador",
+                timestamp = DateTime.UtcNow
+            });
         }
     }
 }
