@@ -9,40 +9,31 @@ using PerceptAI.API.Settings;
 
 namespace PerceptAI.API.Services
 {
-    /// <summary>
-    /// Serviço responsável por persistir detecções e disparar alertas no Supabase
-    /// usando a REST API PostgREST com a Service Role Key (bypass de RLS).
-    /// </summary>
+    
     public class SupabaseService
     {
         private readonly HttpClient _http;
         private readonly ILogger<SupabaseService> _logger;
 
-        // DTO interno para inserção na tabela `detections`
         private record DetectionRow(
             string patient_id,
             string tipo_emocao,
             float confianca,
             string timestamp);
 
-        // DTO interno para inserção na tabela `alerts`
         private record AlertRow(
             string detection_id,
             string cuidador_id,
             bool lido);
 
-        // DTO interno para inserção na tabela `expressoes_faciais`
-        // Campos confirmados pelo schema Supabase: internacao_id é UUID string
         private record ExpressaoRow(
-            string internacao_id, // UUID string
-            string mood,          // ENUM: dor|medo|tristeza|enjoo|sono|dormindo|acordado|neutro
-            int confianca,        // 0-100 (percentual inteiro)
-            string timestamp); // timestamp ISO 8601
+            string internacao_id, 
+            string mood,          
+            int confianca,        
+            string timestamp); 
 
-        // Resposta mínima de detecção (só precisamos do id gerado)
         private record DetectionCreated(string id);
 
-        // Resposta mínima de patient (só precisamos do cuidador_id)
         private record PatientRow(string cuidador_id);
 
         public SupabaseService(
@@ -53,21 +44,13 @@ namespace PerceptAI.API.Services
             _logger = logger;
         }
 
-        // ----------------------------------------------------------------
-        // PUBLIC API
-        // ----------------------------------------------------------------
-
-        /// <summary>
-        /// Salva uma detecção na tabela <c>detections</c> e dispara um alerta
-        /// automático para o cuidador responsável pelo paciente.
-        /// </summary>
         public async Task<bool> SaveDetectionAsync(
             string patientId,
             string emotion,
             float confidence,
             DateTime timestamp)
         {
-            // 1. Inserir detecção e recuperar o id gerado pelo Supabase
+            
             string? detectionId = await InsertDetectionAsync(patientId, emotion, confidence, timestamp);
             if (detectionId is null)
             {
@@ -75,7 +58,6 @@ namespace PerceptAI.API.Services
                 return false;
             }
 
-            // 2. Buscar o cuidador responsável pelo paciente
             string? cuidadorId = await FetchCuidadorIdAsync(patientId);
             if (cuidadorId is null)
             {
@@ -85,27 +67,19 @@ namespace PerceptAI.API.Services
                 return false;
             }
 
-            // 3. Criar alerta para o cuidador
             await InsertAlertAsync(detectionId, cuidadorId);
 
             return true;
         }
 
-        /// <summary>
-        /// Salva uma detecção na tabela <c>expressoes_faciais</c> (fluxo web).
-        /// Campos baseados no schema PostgreSQL real do Supabase.
-        /// confianca é armazenado como percentual inteiro (0-100).
-        /// internacao_id é INT no banco, convertido de string UUID.
-        /// </summary>
         public async Task<bool> SaveExpressaoAsync(
             string internacaoId,
             string mood,
             float confidenceRaw)
         {
-            // Converte confiança de [0.0-1.0] para percentual inteiro [0-100]
+            
             int confiancaPerc = (int)Math.Round(confidenceRaw * 100);
 
-            // internacao_id é UUID string
             if (string.IsNullOrWhiteSpace(internacaoId))
             {
                 _logger.LogError("InternacaoId inválido (vazio): {InternacaoId}", internacaoId);
@@ -147,9 +121,6 @@ namespace PerceptAI.API.Services
             }
         }
 
-        /// <summary>
-        /// Retorna o JSON bruto das últimas detecções (útil para testes).
-        /// </summary>
         public async Task<string> FetchDetectionsRawAsync(int limit = 10)
         {
             try
@@ -172,10 +143,6 @@ namespace PerceptAI.API.Services
             }
         }
 
-        // ----------------------------------------------------------------
-        // PRIVATE HELPERS
-        // ----------------------------------------------------------------
-
         private async Task<string?> InsertDetectionAsync(
             string patientId,
             string emotion,
@@ -186,11 +153,11 @@ namespace PerceptAI.API.Services
                 patient_id:  patientId,
                 tipo_emocao: emotion,
                 confianca:   confidence,
-                timestamp:   timestamp.ToString("o")); // ISO 8601
+                timestamp:   timestamp.ToString("o")); 
 
             try
             {
-                // Prefer=return=representation faz o Supabase devolver a linha inserida (com o id)
+                
                 using var request = new HttpRequestMessage(HttpMethod.Post, "detections");
                 request.Headers.Add("Prefer", "return=representation");
                 request.Content = JsonContent.Create(row);
@@ -220,7 +187,7 @@ namespace PerceptAI.API.Services
         {
             try
             {
-                // GET /patients?id=eq.{patientId}&select=cuidador_id
+                
                 var url = $"patients?id=eq.{patientId}&select=cuidador_id";
                 var rows = await _http.GetFromJsonAsync<PatientRow[]>(url);
                 return rows?.Length > 0 ? rows[0].cuidador_id : null;

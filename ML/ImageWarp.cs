@@ -3,10 +3,7 @@ using PerceptAI.API.Models;
 
 namespace PerceptAI.API.ML
 {
-    /// <summary>
-    /// Amostragem bilinear com padding zero, equivalente ao cv2.warpAffine usado pela
-    /// referência MediaPipe (um único reescalonamento direto para a resolução do modelo).
-    /// </summary>
+    
     public static class ImageWarp
     {
         public static ImageRgb24 Letterbox(ImageRgb24 src, int outSize, out float scale, out float padX, out float padY)
@@ -28,10 +25,6 @@ namespace PerceptAI.API.ML
             return new ImageRgb24(outSize, outSize, dst);
         }
 
-        /// <summary>
-        /// Recorta a ROI quadrada rotacionada já na resolução do modelo.
-        /// O mapeamento inverso (destino -> imagem) é aplicado por <see cref="CropToImage"/>.
-        /// </summary>
         public static ImageRgb24 WarpRoi(ImageRgb24 src, Roi roi, int outSize)
         {
             double rad = roi.AngleDegrees * Math.PI / 180.0;
@@ -55,7 +48,6 @@ namespace PerceptAI.API.ML
             return new ImageRgb24(outSize, outSize, dst);
         }
 
-        /// <summary>Mapeia um ponto do recorte de volta para coordenadas da imagem original.</summary>
         public static Point2 CropToImage(float u, float v, Roi roi, int outSize)
         {
             double rad = roi.AngleDegrees * Math.PI / 180.0;
@@ -69,7 +61,6 @@ namespace PerceptAI.API.ML
                 roi.CenterY + sin * dx + cos * dy);
         }
 
-        /// <summary>Redimensionamento esticado (sem preservar proporção) com bilinear e clamp de borda.</summary>
         public static ImageRgb24 ResizeStretch(ImageRgb24 src, int width, int height)
         {
             var dst = new byte[width * height * 3];
@@ -91,7 +82,7 @@ namespace PerceptAI.API.ML
         private static void SampleBilinear(ImageRgb24 src, float sx, float sy, byte[] dst, int dstIndex)
         {
             if (sx < 0f || sy < 0f || sx > src.Width - 1 || sy > src.Height - 1)
-                return; // fora da imagem -> zeros, como o cropper da MediaPipe
+                return; 
 
             int x0 = (int)MathF.Floor(sx);
             int y0 = (int)MathF.Floor(sy);

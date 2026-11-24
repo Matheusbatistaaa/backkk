@@ -14,13 +14,12 @@ namespace PerceptAI.API.Models
         public float CenterY => Y + Height / 2f;
     }
 
-    /// <summary>Região quadrada rotacionada (centro, lado e ângulo em graus).</summary>
     public readonly record struct Roi(float CenterX, float CenterY, float Side, float AngleDegrees);
 
     public sealed class FaceDetection
     {
         public RectF Bounds { get; init; }
-        /// <summary>6 keypoints na ordem do BlazeFace: olho direto, olho esquerdo, nariz, boca, orelhas.</summary>
+        
         public Point2[] Keypoints { get; init; } = Array.Empty<Point2>();
         public float Score { get; init; }
     }

@@ -6,10 +6,7 @@ using PerceptAI.API.Models;
 
 namespace PerceptAI.API.Services
 {
-    /// <summary>
-    /// Converte os 468 marcos faciais (e 21 pontos por mão) em métricas geométricas
-    /// e fotométricas normalizadas. Nenhuma emoção é decidida aqui.
-    /// </summary>
+    
     public sealed class FacialMetricsService
     {
         private readonly EmotionRuleOptions _o;
@@ -28,7 +25,9 @@ namespace PerceptAI.API.Services
             float faceWidth = D(p, FaceMeshIndices.RightCheek, FaceMeshIndices.LeftCheek);
             float faceHeight = D(p, FaceMeshIndices.Forehead, FaceMeshIndices.Chin);
             if (iod < 1e-3f)
+            {
                 throw new InvalidOperationException("Pontos dos olhos coincidentes; malha facial inválida.");
+            }
 
             float rightEar = EyeAspect(p, FaceMeshIndices.RightEyeOuter, FaceMeshIndices.RightEyeInner,
                 FaceMeshIndices.RightEyeUpper, FaceMeshIndices.RightEyeLower,
@@ -44,69 +43,30 @@ namespace PerceptAI.API.Services
 
             float mar = innerMouthWidth > 1e-3f ? mouthOpening / innerMouthWidth : 0f;
             float openRatio = faceHeight > 1e-3f ? mouthOpening / faceHeight : 0f;
-
             float cornerSag = 0f;
             if (mouthWidth > 1e-3f)
             {
-                // Referência na comissura interna (canto interno dos lábios): ela fica
-                // presa à "linha da boca" e NÃO desce quando a mandíbula abre, então
-                // bocejo/grito não viram falsa tristeza. Cantos externos abaixo da
-                // comissura => positivo; acima (sorriso) => negativo.
                 float cornerY = (p[FaceMeshIndices.MouthRightCorner].Y + p[FaceMeshIndices.MouthLeftCorner].Y) / 2f;
-                float innerCornerY = (p[FaceMeshIndices.MouthRightInner].Y + p[FaceMeshIndices.MouthLeftInner].Y) / 2f;
-                // Eixo Y cresce para baixo: cantos abaixo da comissura => positivo.
-                cornerSag = (cornerY - innerCornerY) / mouthWidth;
+                float centerY = (p[FaceMeshIndices.UpperLipInner].Y + p[FaceMeshIndices.LowerLipInner].Y) / 2f;
+                cornerSag = (cornerY - centerY) / mouthWidth;
             }
 
-            // Referência na linha dos quatro cantos dos olhos: estável à pálpebra,
-            // diferente de usar o ponto superior do olho (que sobe em olhos arregalados).
-            float eyeLineY = (p[FaceMeshIndices.RightEyeOuter].Y + p[FaceMeshIndices.RightEyeInner].Y
-                            + p[FaceMeshIndices.LeftEyeOuter].Y + p[FaceMeshIndices.LeftEyeInner].Y) / 4f;
-            float browY = (p[FaceMeshIndices.RightBrowInner].Y + p[FaceMeshIndices.LeftBrowInner].Y) / 2f;
-            float browRaise = (eyeLineY - browY) / iod;
+            float browRaise = ((p[FaceMeshIndices.RightEyeUpper].Y + p[FaceMeshIndices.LeftEyeUpper].Y) / 2f
+                             - (p[FaceMeshIndices.RightBrowInner].Y + p[FaceMeshIndices.LeftBrowInner].Y) / 2f) / iod;
 
             var (teethRatio, teethPixels, mouthPixels) = AnalyzeTeeth(image, p, notes);
             var (handPoints, handDistance, handDetected) = AnalyzeHands(p, hands, mouthWidth, iod);
 
-            // Estados de olhos exigem concordância dos dois olhos: piscar unilateral é ambíguo.
-            bool rightClosed = rightEar < _o.EyeClosedEar;
-            bool leftClosed = leftEar < _o.EyeClosedEar;
-            // Fechamento real (dormindo): média baixa e os dois olhos longe do estado aberto.
-            bool eyesClosed = ear < _o.EyeClosedEar
-                              && rightEar < _o.EyeClosedMaxEar
-                              && leftEar < _o.EyeClosedMaxEar;
-            bool eyesAlmostClosed = !eyesClosed
-                                    && ear < _o.EyeClosedSoftEar
-                                    && rightEar < _o.EyeClosedSoftMaxEar
-                                    && leftEar < _o.EyeClosedSoftMaxEar;
-
-            bool rightNarrow = rightEar < _o.EyeNarrowEar;
-            bool leftNarrow = leftEar < _o.EyeNarrowEar;
-            bool eyesNarrowed = !rightClosed && !leftClosed && rightNarrow && leftNarrow;
-            bool eyesOpen = !rightClosed && !leftClosed && !rightNarrow && !leftNarrow;
-            // Arregalar exige média acima do limiar e nenhum olho em faixa fechada/ruidosa.
-            bool eyesWide = !rightClosed && !leftClosed
-                            && ear >= _o.WideEyeEar
-                            && rightEar >= _o.MinWideEyeSideEar
-                            && leftEar >= _o.MinWideEyeSideEar;
-
-            if (rightClosed != leftClosed)
-                notes.Add($"Olhos assimétricos (direito={rightEar:F3}, esquerdo={leftEar:F3}); estado de vigília indeterminado.");
+            bool eyesClosed = ear < _o.EyeClosedEar;
+            bool eyesNarrowed = !eyesClosed && ear < _o.EyeNarrowEar;
+            bool eyesOpen = !eyesClosed && !eyesNarrowed;
 
             bool yawning = mar >= _o.YawnMouthAspectRatio && openRatio >= _o.YawnOpenRatio;
-            // A referência na comissura interna é estável à abertura da boca, então o
-            // frown não precisa mais de trava por MAR (bocejo/grito não o disparam).
             bool frowning = cornerSag >= _o.FrownSagRatio;
-            // Cantos acima da comissura: sorriso. Impede que sorriso com dentes vire "dor".
-            bool smiling = cornerSag <= -_o.SmileCornerLiftRatio;
             bool browsRaised = browRaise >= _o.BrowRaiseRatio;
             bool teethVisible = teethRatio >= _o.TeethPixelRatio && teethPixels >= _o.MinTeethPixels;
-            bool teethClenched = teethVisible && mar <= _o.TeethMaxMouthAspectRatio;
-            bool handOnMouth = handPoints >= _o.MinHandPointsInMouthRegion
-                               && handDistance <= _o.MaxHandMouthDistanceRatio;
-
-            if (faceWidth < _o.MinFaceWidthPx)
-                notes.Add($"Rosto pequeno ({faceWidth:F0}px < {_o.MinFaceWidthPx:F0}px); métricas menos confiáveis.");
+            bool teethClenched = teethVisible && mar >= 0.02f && mar <= _o.TeethMaxMouthAspectRatio;
+            bool handOnMouth = handPoints >= _o.MinHandPointsInMouthRegion;
 
             return new FacialMetrics
             {
@@ -118,7 +78,6 @@ namespace PerceptAI.API.Services
                 EyeAspectRatio = ear,
                 MouthAspectRatio = mar,
                 MouthOpenRatio = openRatio,
-                MouthOpeningPx = mouthOpening,
                 MouthWidth = mouthWidth,
                 MouthCornerSagRatio = cornerSag,
                 BrowRaiseRatio = browRaise,
@@ -128,16 +87,11 @@ namespace PerceptAI.API.Services
                 HandPointsInMouthRegion = handPoints,
                 HandMouthDistanceRatio = handDistance,
                 HandDetected = handDetected,
-                RightEyeClosed = rightClosed,
-                LeftEyeClosed = leftClosed,
                 EyesClosed = eyesClosed,
-                EyesAlmostClosed = eyesAlmostClosed,
                 EyesNarrowed = eyesNarrowed,
                 EyesOpen = eyesOpen,
-                EyesWide = eyesWide,
                 Yawning = yawning,
                 Frowning = frowning,
-                Smiling = smiling,
                 BrowsRaised = browsRaised,
                 TeethVisible = teethVisible,
                 TeethClenched = teethClenched,
@@ -157,10 +111,6 @@ namespace PerceptAI.API.Services
             return (v1 + v2) / (2f * width);
         }
 
-        /// <summary>
-        /// Mede a fração de pixels claros/pouco saturados dentro do contorno interno dos lábios.
-        /// Dentes aparecem como banda clara; gengiva, lábios e cavidade escura não contam.
-        /// </summary>
         private static (float Ratio, int TeethPixels, int RegionPixels) AnalyzeTeeth(
             ImageRgb24 image, Point3[] p, List<string> notes)
         {
@@ -194,7 +144,7 @@ namespace PerceptAI.API.Services
                     int min = Math.Min(r, Math.Min(g, b));
                     float saturation = max > 0 ? (max - min) / (float)max : 0f;
 
-                    if (max >= 130 && saturation <= 0.35f) teeth++;
+                    if (max >= 140 && saturation <= 0.32f) teeth++;
                 }
             }
 
@@ -245,8 +195,6 @@ namespace PerceptAI.API.Services
 
             return (bestPoints, float.IsFinite(bestDistance) ? bestDistance : 0f, true);
         }
-
-        // ---- geometria auxiliar ----
 
         private static List<Point2> ConvexHull(List<Point2> points)
         {

@@ -9,10 +9,6 @@ namespace PerceptAI.API.ML
     {
         public static float Sigmoid(float x) => 1f / (1f + MathF.Exp(-x));
 
-        /// <summary>
-        /// Âncoras SSD da MediaPipe (strides [8, 16, 16, 16], razão 1.0, tamanho fixo).
-        /// Camadas com o mesmo stride empilham âncoras por célula.
-        /// </summary>
         public static Point2[] GenerateAnchors(int inputSize, int[] strides)
         {
             var anchors = new List<Point2>();
@@ -36,11 +32,6 @@ namespace PerceptAI.API.ML
             return anchors.ToArray();
         }
 
-        /// <summary>
-        /// NMS ponderado da MediaPipe: candidatos sobrepostos ao melhor detecção são
-        /// fundidos por média ponderada pelo score (caixa e keypoints), não descartados.
-        /// Formato de linha: [score, cx, cy, w, h, ...extras].
-        /// </summary>
         public static List<float[]> WeightedNms(List<float[]> rows, float iouThreshold = 0.3f)
         {
             var remaining = rows

@@ -5,13 +5,11 @@ namespace PerceptAI.API.ML
 {
     public static class TensorBuilder
     {
-        /// <summary>RGB em [0,1], layout NCHW (modelos de landmark).</summary>
+        
         public static DenseTensor<float> UnitChw(ImageRgb24 image) => Build(image, 0f, 255f);
 
-        /// <summary>RGB em [-1,1], layout NCHW (BlazeFace).</summary>
         public static DenseTensor<float> SignedChw(ImageRgb24 image) => Build(image, 127.5f, 127.5f - 0f, signed: true);
 
-        /// <summary>Normalização ImageNet em NCHW (classificador legado).</summary>
         public static DenseTensor<float> ImageNetChw(ImageRgb24 image)
         {
             var data = new float[3 * image.Width * image.Height];

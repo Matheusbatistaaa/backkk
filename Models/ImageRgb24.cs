@@ -5,7 +5,7 @@ using SixLabors.ImageSharp.PixelFormats;
 
 namespace PerceptAI.API.Models
 {
-    /// <summary>Imagem RGB intercalada em memória, usada por todo o pipeline de landmarks.</summary>
+    
     public sealed class ImageRgb24
     {
         public int Width { get; }

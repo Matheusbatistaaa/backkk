@@ -1,16 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
+    <Content Include="ML\*.onnx" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="ML\*.onnx.data" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="test-images\*" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="9.0.0" />
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.26.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.20.1" />
     <PackageReference Include="Scalar.AspNetCore" Version="2.16.2" />
     <PackageReference Include="SixLabors.ImageSharp" Version="4.1.2" />
   </ItemGroup>
+
+  <Target Name="CopyOnnxRuntimeNative" AfterTargets="Build" Condition="Exists('$(OutDir)runtimes\win-x64\native\onnxruntime.dll')">
+    <Copy SourceFiles="$(OutDir)runtimes\win-x64\native\onnxruntime.dll;$(OutDir)runtimes\win-x64\native\onnxruntime_providers_shared.dll"
+          DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

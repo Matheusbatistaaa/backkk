@@ -13,11 +13,9 @@ using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Render/Railway injetam PORT; localmente o padrão é 5198.
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5198";
 builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
-// Carrega .env local e mapeia para SupabaseSettings
 var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
 if (File.Exists(envPath))
 {
@@ -26,10 +24,11 @@ if (File.Exists(envPath))
         if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith('#')) continue;
         var idx = line.IndexOf('=');
         if (idx <= 0) continue;
-        var key   = line[..idx].Trim().Trim('"');
+        var key = line[..idx].Trim().Trim('"');
         var value = line[(idx + 1)..].Trim().Trim('"');
         builder.Configuration[key] = value;
     }
+
     var supabaseUrl = builder.Configuration["VITE_SUPABASE_URL"]
                    ?? builder.Configuration["SUPABASE_URL"]
                    ?? "";
@@ -44,68 +43,54 @@ if (File.Exists(envPath))
         builder.Configuration["SupabaseSettings:ServiceRoleKey"] = serviceRoleKey;
 }
 
-// ------------------------------------------------------------------
-// CONFIGURAÇÕES
-// ------------------------------------------------------------------
 builder.Services.Configure<SupabaseSettings>(builder.Configuration.GetSection(SupabaseSettings.SectionName));
 
-// ------------------------------------------------------------------
-// CORS
-// ------------------------------------------------------------------
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
+        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
 });
 
-// ------------------------------------------------------------------
-// OpenAPI (Scalar)
-// ------------------------------------------------------------------
 builder.Services.AddOpenApi();
-
-// ------------------------------------------------------------------
-// Serviços de negócio
-// ------------------------------------------------------------------
 builder.Services.AddControllers();
+
+builder.Services.AddSingleton(new EmotionRuleOptions());
 builder.Services.AddSingleton<ImagePreprocessingService>();
-builder.Services.AddSingleton(sp =>
-    builder.Configuration.GetSection("EmotionRules").Get<EmotionRuleOptions>() ?? new EmotionRuleOptions());
-
-builder.Services.AddSingleton(sp =>
-{
-    var baseDir = AppContext.BaseDirectory;
-    var physioPath = Path.Combine(baseDir, "ML", "perceptai_physio.onnx");
-    var emotionPath = Path.Combine(baseDir, "ML", "perceptai_emotion.onnx");
-
-    if (!File.Exists(physioPath))
-        physioPath = Path.Combine(Directory.GetCurrentDirectory(), "ML", "perceptai_physio.onnx");
-    if (!File.Exists(emotionPath))
-        emotionPath = Path.Combine(Directory.GetCurrentDirectory(), "ML", "perceptai_emotion.onnx");
-    if (!File.Exists(physioPath) || !File.Exists(emotionPath))
-        throw new FileNotFoundException($"ONNX models not found. Physio: '{physioPath}', Emotion: '{emotionPath}'.");
-
-    // Modelos do pipeline de marcos são opcionais: se faltarem, a API usa o classificador.
-    var landmarkDir = Path.Combine(Directory.GetCurrentDirectory(), "ML");
-    if (!Directory.Exists(landmarkDir))
-        landmarkDir = Path.Combine(baseDir, "ML");
-
-    return new ModelLoader(physioPath, emotionPath, landmarkDir);
-});
-
-builder.Services.AddSingleton<EmotionDetectionService>();
 builder.Services.AddSingleton<FacialMetricsService>();
 builder.Services.AddSingleton<EmotionRuleEngine>();
 builder.Services.AddSingleton<LandmarkDetectionService>();
-builder.Services.AddSingleton<DetectionPipelineService>();
+
+builder.Services.AddSingleton(sp =>
+{
+    var logger = sp.GetRequiredService<ILogger<ModelLoader>>();
+    var mlDir = ResolveMlDirectory(logger);
+
+    string? Resolve(string fileName)
+    {
+        var path = Path.Combine(mlDir, fileName);
+        if (File.Exists(path)) return path;
+        logger.LogWarning("Modelo ausente: {Path}", path);
+        return null;
+    }
+
+    var loader = new ModelLoader(
+        Resolve("perceptai_mobilenetv2.onnx"),
+        Resolve("face_detection_short_range.onnx"),
+        Resolve("face_mesh_Nx3x192x192.onnx"),
+        Resolve("palm_detection_full.onnx"),
+        Resolve("hand_landmark_full.onnx"));
+
+    logger.LogInformation("Pipeline de landmarks: {Enabled}. Classificador: {Classifier}.",
+        loader.HasLandmarkPipeline, loader.HasClassifier);
+    if (loader.LoadWarnings.Count > 0)
+        logger.LogWarning("Modelos não carregados: {Missing}", string.Join(", ", loader.LoadWarnings));
+
+    return loader;
+});
+
+builder.Services.AddSingleton<EmotionDetectionService>();
 builder.Services.AddScoped<SupabaseService>();
 
-// ------------------------------------------------------------------
-// HttpClient para Supabase (pré-configurado)
-// ------------------------------------------------------------------
 builder.Services.AddHttpClient("supabase", (sp, client) =>
 {
     var settings = sp.GetRequiredService<IOptions<SupabaseSettings>>().Value;
@@ -120,10 +105,6 @@ builder.Services.AddHttpClient("supabase", (sp, client) =>
 
 var app = builder.Build();
 
-app.Logger.LogInformation("PerceptAI ouvindo em http://0.0.0.0:{Port}", port);
-app.Logger.LogInformation("Pipeline de detecção: {Pipeline}",
-    app.Services.GetRequiredService<ModelLoader>().HasLandmarkPipeline ? "landmarks" : "classificador (fallback)");
-
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -131,48 +112,39 @@ if (app.Environment.IsDevelopment())
     app.MapGet("/swagger", async ctx =>
     {
         ctx.Response.Redirect("/scalar/v1");
-        await Task.CompletedTask;
+        await System.Threading.Tasks.Task.CompletedTask;
     });
 }
 
 app.UseCors("AllowAll");
 app.UseAuthorization();
 
-// Endpoint de depuração local – executa uma imagem fixa pelo pipeline completo
-app.MapGet("/debug/test", async (Microsoft.AspNetCore.Http.HttpContext ctx) =>
+app.MapGet("/debug/test", (Microsoft.AspNetCore.Http.HttpContext ctx) =>
 {
     var imgPath = Path.Combine(Directory.GetCurrentDirectory(), "test-images", "example.jpg");
     if (!File.Exists(imgPath))
         return Results.NotFound("Test image not found");
 
-    var imgBytes = await File.ReadAllBytesAsync(imgPath);
-    var base64 = Convert.ToBase64String(imgBytes);
+    var image = ImageRgb24.FromFile(imgPath);
+    var detector = ctx.RequestServices.GetRequiredService<EmotionDetectionService>();
+    var result = detector.AnalyzeDualState(image);
 
-    var pipeline = ctx.RequestServices.GetRequiredService<DetectionPipelineService>();
-    try
+    return Results.Json(new
     {
-        var outcome = pipeline.Analyze(base64);
-        return Results.Json(new
-        {
-            estadoPrincipal = outcome.Decision.EstadoPrincipal,
-            estadoFisiologico = outcome.Decision.EstadoFisiologico,
-            confiancaFisiologica = outcome.Decision.ConfiancaFisiologica,
-            estadoEmocional = outcome.Decision.EstadoEmocional,
-            emocaoSecundaria = outcome.Decision.EmocaoSecundaria,
-            confiancaEmocional = outcome.Decision.ConfiancaEmocional,
-            fonte = outcome.Decision.Fonte
-        });
-    }
-    catch (FormatException ex)
-    {
-        return Results.BadRequest(new { message = ex.Message });
-    }
+        estadoFisiologico = result.EstadoFisiologico,
+        confiancaFisiologica = result.ConfiancaFisiologica,
+        estadoEmocional = result.EstadoEmocional,
+        confiancaEmocional = result.ConfiancaEmocional,
+        fonte = result.Fonte,
+        metricas = result.Metricas,
+        regras = result.Regras,
+        observacoes = result.Observacoes
+    });
 });
 
-// Teste de IA – imagem Base64 + análise detalhada (usado pelo modal de teste do front)
 app.MapPost("/api/test-ai", async (Microsoft.AspNetCore.Http.HttpContext ctx) =>
 {
-    using var reader = new System.IO.StreamReader(ctx.Request.Body);
+    using var reader = new StreamReader(ctx.Request.Body);
     var body = await reader.ReadToEndAsync();
     var json = System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(body);
     if (!json.TryGetProperty("image_base64", out var imgProp) || imgProp.ValueKind != System.Text.Json.JsonValueKind.String)
@@ -182,28 +154,26 @@ app.MapPost("/api/test-ai", async (Microsoft.AspNetCore.Http.HttpContext ctx) =>
     if (string.IsNullOrWhiteSpace(base64))
         return Results.BadRequest(new { message = "image_base64 required" });
 
-    var pipeline = ctx.RequestServices.GetRequiredService<DetectionPipelineService>();
+    var preprocessor = ctx.RequestServices.GetRequiredService<ImagePreprocessingService>();
+    var detector = ctx.RequestServices.GetRequiredService<EmotionDetectionService>();
 
     try
     {
-        var outcome = pipeline.Analyze(base64!, includeClassifierProbabilities: true);
-        var decision = outcome.Decision;
+        var image = preprocessor.LoadBase64Image(base64!);
+        var probabilities = detector.GetAllProbabilities(image);
+        var result = detector.AnalyzeDualState(image);
 
         return Results.Json(new
         {
-            estadoPrincipal = decision.EstadoPrincipal,
-            estadoFisiologico = decision.EstadoFisiologico,
-            confiancaFisiologica = decision.ConfiancaFisiologica,
-            estadoEmocional = decision.EstadoEmocional,
-            emocaoSecundaria = decision.EmocaoSecundaria,
-            confiancaEmocional = decision.ConfiancaEmocional,
-            fonte = decision.Fonte,
-            facesDetectadas = outcome.FacesDetected,
-            observacoes = decision.Observacoes,
-            regras = decision.Regras,
-            metricas = decision.Metricas,
-            allProbabilities = outcome.ClassifierProbabilities
-                               ?? new System.Collections.Generic.Dictionary<string, float>()
+            estadoFisiologico = result.EstadoFisiologico,
+            confiancaFisiologica = result.ConfiancaFisiologica,
+            estadoEmocional = result.EstadoEmocional,
+            confiancaEmocional = result.ConfiancaEmocional,
+            fonte = result.Fonte,
+            metricas = result.Metricas,
+            regras = result.Regras,
+            observacoes = result.Observacoes,
+            allProbabilities = probabilities
         });
     }
     catch (FormatException ex)
@@ -216,5 +186,54 @@ app.MapPost("/api/test-ai", async (Microsoft.AspNetCore.Http.HttpContext ctx) =>
     }
 });
 
+if (app.Environment.IsDevelopment())
+{
+    var debugRoot = Environment.GetEnvironmentVariable("DEBUG_IMAGE_ROOT");
+    app.MapGet("/debug/analyze", (Microsoft.AspNetCore.Http.HttpContext ctx, string path) =>
+    {
+        if (string.IsNullOrWhiteSpace(debugRoot))
+            return Results.NotFound("DEBUG_IMAGE_ROOT não configurado.");
+
+        var root = Path.GetFullPath(debugRoot);
+        var full = Path.GetFullPath(Path.Combine(root, path));
+        if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase) || !File.Exists(full))
+            return Results.NotFound("Imagem fora do diretório permitido.");
+
+        var detector = ctx.RequestServices.GetRequiredService<EmotionDetectionService>();
+        var result = detector.AnalyzeDualState(ImageRgb24.FromFile(full));
+
+        return Results.Json(new
+        {
+            arquivo = path,
+            estadoFisiologico = result.EstadoFisiologico,
+            estadoEmocional = result.EstadoEmocional,
+            confianca = result.ConfiancaEmocional ?? result.ConfiancaFisiologica,
+            fonte = result.Fonte,
+            metricas = result.Metricas,
+            regras = result.Regras,
+            observacoes = result.Observacoes
+        });
+    });
+}
+
 app.MapControllers();
 app.Run();
+
+static string ResolveMlDirectory(ILogger logger)
+{
+    var candidates = new[]
+    {
+        Path.Combine(AppContext.BaseDirectory, "ML"),
+        Path.Combine(Directory.GetCurrentDirectory(), "ML")
+    };
+
+    foreach (var candidate in candidates)
+    {
+        if (Directory.Exists(candidate)) return candidate;
+    }
+
+    var fallback = candidates[0];
+    Directory.CreateDirectory(fallback);
+    logger.LogWarning("Diretório ML não encontrado; criado vazio em {Path}", fallback);
+    return fallback;
+}
