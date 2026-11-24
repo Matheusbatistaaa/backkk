@@ -49,7 +49,7 @@ namespace PerceptAI.API.Services
             var inputTensor = new DenseTensor<float>(normalizedData, new[] { 1, 3, 224, 224 });
             var inputs = new List<NamedOnnxValue>
             {
-                NamedOnnxValue.CreateFromTensor("images", inputTensor)
+                NamedOnnxValue.CreateFromTensor("input", inputTensor)
             };
 
             using var results = session.Run(inputs);
@@ -156,16 +156,22 @@ namespace PerceptAI.API.Services
 
         /// <summary>
         /// Analisa usando os 2 modelos separados (fisiológico + emocional).
+        /// Ambos os modelos output 8 classes (formato legado):
+        /// 0: dor, 1: enjoo, 2: medo, 3: sono, 4: tristeza, 5: neutro, 6: acordado, 7: dormindo
         /// </summary>
         private DualStateResult AnalyzeDualStateWithTwoModels(float[] normalizedData)
         {
             // Passo 1: Modelo Fisiológico - determina se está acordado ou dormindo
             var physioProbs = GetProbabilities(normalizedData, _modelLoader.PhysioSession);
-            float pAcordado = physioProbs[0];  // índice 0
-            float pDormindo = physioProbs[1];  // índice 1
+            // Physio model outputs 8 classes (legacy format), indices 6=acordado, 7=dormindo
+            float pAcordado = physioProbs.Length > 6 ? physioProbs[6] : 0f;
+            float pDormindo = physioProbs.Length > 7 ? physioProbs[7] : 0f;
 
             // Passo 2: Modelo Emocional - sempre executa para obter probabilidades emocionais
-            var emotionProbs = GetProbabilities(normalizedData, _modelLoader.EmotionSession, _emotionTemperatures);
+            var emotionProbsFull = GetProbabilities(normalizedData, _modelLoader.EmotionSession, _emotionTemperatures);
+            // Emotion model outputs 8 classes (legacy format), take first 6 for emotions
+            var emotionProbs = new float[6];
+            Array.Copy(emotionProbsFull, emotionProbs, 6);
 
             // DEBUG: Log all emotion probabilities
             Console.WriteLine($"[EmotionDetectionService] Physio: acordado={pAcordado:F4}, dormindo={pDormindo:F4}");
