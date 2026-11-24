@@ -6,10 +6,7 @@ using PerceptAI.API.Models;
 
 namespace PerceptAI.API.Services
 {
-    /// <summary>
-    /// Converte os 468 marcos faciais (e 21 pontos por mão) em métricas geométricas
-    /// e fotométricas normalizadas. Nenhuma emoção é decidida aqui.
-    /// </summary>
+    
     public sealed class FacialMetricsService
     {
         private readonly EmotionRuleOptions _o;
@@ -114,10 +111,6 @@ namespace PerceptAI.API.Services
             return (v1 + v2) / (2f * width);
         }
 
-        /// <summary>
-        /// Mede a fração de pixels claros/pouco saturados dentro do contorno interno dos lábios.
-        /// Dentes aparecem como banda clara; gengiva, lábios e cavidade escura não contam.
-        /// </summary>
         private static (float Ratio, int TeethPixels, int RegionPixels) AnalyzeTeeth(
             ImageRgb24 image, Point3[] p, List<string> notes)
         {
@@ -202,8 +195,6 @@ namespace PerceptAI.API.Services
 
             return (bestPoints, float.IsFinite(bestDistance) ? bestDistance : 0f, true);
         }
-
-        // ---- geometria auxiliar ----
 
         private static List<Point2> ConvexHull(List<Point2> points)
         {

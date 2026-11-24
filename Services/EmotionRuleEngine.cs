@@ -5,16 +5,7 @@ using PerceptAI.API.Models;
 
 namespace PerceptAI.API.Services
 {
-    /// <summary>
-    /// Motor de regras determinístico. Todas as emoções passam pela mesma estrutura
-    /// (RuleEvaluation), com limiares explícitos e exclusões mútuas declaradas.
-    ///
-    /// Prioridade (primeira regra satisfeita vence):
-    ///   dor > enjoo > medo > tristeza > sonolência > neutro
-    /// Justificativa: dor exige dois sinais simultâneos (dentes cerrados + olhos apertados)
-    /// e é a condição de maior urgência clínica; enjoo exige o gesto físico (mão na boca);
-    /// medo, tristeza e sonolência têm evidência única e são avaliados em seguida.
-    /// </summary>
+    
     public sealed class EmotionRuleEngine
     {
         private static readonly string[] PriorityOrder = { "dor", "enjoo", "medo", "tristeza", "sono" };
@@ -44,7 +35,7 @@ namespace PerceptAI.API.Services
 
                 if (sleeping)
                 {
-                    // Olhos fechados sem tensão facial => dormindo, nenhuma emoção ativa.
+                    
                     return new EmotionDecision
                     {
                         EstadoFisiologico = "dormindo",
@@ -99,7 +90,6 @@ namespace PerceptAI.API.Services
             };
         }
 
-        /// <summary>Dentes cerrados + olhos apertados, sem bocejo e sem mão cobrindo a boca.</summary>
         private RuleEvaluation EvaluatePain(FacialMetrics m)
         {
             float teethConfidence = Positive(m.TeethRatio, _o.TeethPixelRatio);
@@ -120,7 +110,6 @@ namespace PerceptAI.API.Services
             return new RuleEvaluation("dor", matched, confidence, evidence);
         }
 
-        /// <summary>Mão cobrindo a boca, sem bocejo simultâneo.</summary>
         private RuleEvaluation EvaluateNausea(FacialMetrics m)
         {
             float confidence = Positive(m.HandPointsInMouthRegion, _o.MinHandPointsInMouthRegion);
@@ -138,7 +127,6 @@ namespace PerceptAI.API.Services
             return new RuleEvaluation("enjoo", matched, matched ? confidence : 0f, evidence);
         }
 
-        /// <summary>Sobrancelhas elevadas, olhos abertos e sem dentes visíveis.</summary>
         private RuleEvaluation EvaluateFear(FacialMetrics m)
         {
             float confidence = Positive(m.BrowRaiseRatio, _o.BrowRaiseRatio);
@@ -156,7 +144,6 @@ namespace PerceptAI.API.Services
             return new RuleEvaluation("medo", matched, matched ? confidence : 0f, evidence);
         }
 
-        /// <summary>Cantos da boca abaixo do centro (expressão de tristeza/choro).</summary>
         private RuleEvaluation EvaluateSadness(FacialMetrics m)
         {
             float confidence = Positive(m.MouthCornerSagRatio, _o.FrownSagRatio);
@@ -171,7 +158,6 @@ namespace PerceptAI.API.Services
             return new RuleEvaluation("tristeza", matched, matched ? confidence : 0f, evidence);
         }
 
-        /// <summary>Bocejo (abertura vertical da boca), sem expressão de tristeza simultânea.</summary>
         private RuleEvaluation EvaluateSleepiness(FacialMetrics m)
         {
             float marConfidence = Positive(m.MouthAspectRatio, _o.YawnMouthAspectRatio);

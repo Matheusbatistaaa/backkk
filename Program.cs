@@ -13,11 +13,9 @@ using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Porta configurável (Render/Railway usam PORT; local usa 5198, o mesmo do frontend).
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5198";
 builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
-// Carrega .env local e mapeia para SupabaseSettings.
 var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
 if (File.Exists(envPath))
 {
@@ -45,9 +43,6 @@ if (File.Exists(envPath))
         builder.Configuration["SupabaseSettings:ServiceRoleKey"] = serviceRoleKey;
 }
 
-// ------------------------------------------------------------------
-// CONFIGURAÇÕES E SERVIÇOS
-// ------------------------------------------------------------------
 builder.Services.Configure<SupabaseSettings>(builder.Configuration.GetSection(SupabaseSettings.SectionName));
 
 builder.Services.AddCors(options =>
@@ -124,7 +119,6 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 app.UseAuthorization();
 
-// Endpoint de teste rápido com a imagem local padrão.
 app.MapGet("/debug/test", (Microsoft.AspNetCore.Http.HttpContext ctx) =>
 {
     var imgPath = Path.Combine(Directory.GetCurrentDirectory(), "test-images", "example.jpg");
@@ -148,7 +142,6 @@ app.MapGet("/debug/test", (Microsoft.AspNetCore.Http.HttpContext ctx) =>
     });
 });
 
-// Recebe uma imagem Base64 e devolve a análise completa (usado pelo modal "Testar IA").
 app.MapPost("/api/test-ai", async (Microsoft.AspNetCore.Http.HttpContext ctx) =>
 {
     using var reader = new StreamReader(ctx.Request.Body);
@@ -193,7 +186,6 @@ app.MapPost("/api/test-ai", async (Microsoft.AspNetCore.Http.HttpContext ctx) =>
     }
 });
 
-// Ferramenta de calibração (apenas Development + DEBUG_IMAGE_ROOT definido).
 if (app.Environment.IsDevelopment())
 {
     var debugRoot = Environment.GetEnvironmentVariable("DEBUG_IMAGE_ROOT");

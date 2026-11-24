@@ -5,11 +5,7 @@ using Microsoft.ML.OnnxRuntime;
 
 namespace PerceptAI.API.ML
 {
-    /// <summary>
-    /// Carrega as sessões ONNX do pipeline. O extrator de landmarks é opcional:
-    /// se algum modelo faltar, o serviço cai para o classificador legado,
-    /// evitando que a API fique indisponível.
-    /// </summary>
+    
     public sealed class ModelLoader
     {
         public InferenceSession? EmotionClassifier { get; }

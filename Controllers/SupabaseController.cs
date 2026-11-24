@@ -15,14 +15,14 @@ namespace PerceptAI.API.Controllers
             _supabaseService = supabaseService;
         }
 
-        [HttpGet("test")] // GET /api/supabase/test
+        [HttpGet("test")] 
         public async Task<IActionResult> Test()
         {
             var json = await _supabaseService.FetchDetectionsRawAsync(1);
             return Content(json, "application/json");
         }
 
-        [HttpPost("insert-test")] // POST /api/supabase/insert-test
+        [HttpPost("insert-test")] 
         public async Task<IActionResult> InsertTest()
         {
             var ok = await _supabaseService.SaveDetectionAsync("test-patient", "neutro", 0.5f, System.DateTime.UtcNow);

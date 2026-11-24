@@ -21,11 +21,6 @@ namespace PerceptAI.API.Services
         public IReadOnlyList<string> Observacoes { get; set; } = Array.Empty<string>();
     }
 
-    /// <summary>
-    /// Orquestra o pipeline único de análise:
-    /// imagem -> marcos (rosto/mãos) -> métricas -> regras -> decisão.
-    /// Sem rosto/marcos, cai para o classificador legado de 8 classes.
-    /// </summary>
     public sealed class EmotionDetectionService
     {
         private const int ClassifierInputSize = 224;
@@ -79,7 +74,6 @@ namespace PerceptAI.API.Services
             return (result.PrimaryEmotion, result.PrimaryConfidence);
         }
 
-        /// <summary>Probabilidades do classificador legado, apenas para diagnóstico/tela de teste.</summary>
         public Dictionary<string, float> GetAllProbabilities(ImageRgb24 image)
         {
             var dict = new Dictionary<string, float>();

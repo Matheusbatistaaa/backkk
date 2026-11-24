@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
@@ -19,9 +19,6 @@
     <PackageReference Include="SixLabors.ImageSharp" Version="4.1.2" />
   </ItemGroup>
 
-  <!-- Alguns Windows têm um onnxruntime.dll legado em System32 (Windows ML) que
-       é encontrado antes do pacote NuGet; copiar a DLL correta para a raiz do
-       binário garante que o runtime certo seja carregado. -->
   <Target Name="CopyOnnxRuntimeNative" AfterTargets="Build" Condition="Exists('$(OutDir)runtimes\win-x64\native\onnxruntime.dll')">
     <Copy SourceFiles="$(OutDir)runtimes\win-x64\native\onnxruntime.dll;$(OutDir)runtimes\win-x64\native\onnxruntime_providers_shared.dll"
           DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />

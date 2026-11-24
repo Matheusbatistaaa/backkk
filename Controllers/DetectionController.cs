@@ -25,14 +25,10 @@ namespace PerceptAI.API.Controllers
             _preprocessingService = preprocessingService;
             _detectionService = detectionService;
             _supabaseService = supabaseService;
-            // Threshold usado apenas para o fluxo legado (app mobile).
+            
             _threshold = configuration.GetValue<double>("DetectionSettings:Threshold", 0.75);
         }
 
-        /// <summary>
-        /// Recebe uma imagem em Base64 e o ID do paciente/internação, executa o pipeline
-        /// (landmarks -> métricas -> regras) e persiste o resultado no Supabase.
-        /// </summary>
         [HttpPost("detect")]
         public async Task<IActionResult> Detect([FromBody] DetectionRequest request)
         {

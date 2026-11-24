@@ -6,11 +6,7 @@ using PerceptAI.API.Models;
 
 namespace PerceptAI.API.ML
 {
-    /// <summary>
-    /// Hand Landmark full (224x224, RGB [0,1]) — 21 pontos por mão.
-    /// ROI segue palm_detection_detection_to_roi: caixa 2.6x, centro deslocado
-    /// meia caixa na direção dos dedos e rotação punho -> MCP do dedo médio.
-    /// </summary>
+    
     public sealed class HandLandmarkPredictor
     {
         public const int InputSize = 224;

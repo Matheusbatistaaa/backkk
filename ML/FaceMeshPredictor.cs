@@ -6,11 +6,7 @@ using PerceptAI.API.Models;
 
 namespace PerceptAI.API.ML
 {
-    /// <summary>
-    /// Face Mesh (192x192, RGB em [0,1]) — 468 landmarks por rosto.
-    /// A ROI segue a regra detection_to_roi da MediaPipe: quadrado do lado maior
-    /// da caixa expandido 1.5x e rotacionado pelo eixo dos olhos.
-    /// </summary>
+    
     public sealed class FaceMeshPredictor
     {
         public const int InputSize = 192;

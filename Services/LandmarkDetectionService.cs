@@ -5,9 +5,7 @@ using PerceptAI.API.Models;
 
 namespace PerceptAI.API.Services
 {
-    /// <summary>
-    /// Executa o pipeline de marcos: rosto (BlazeFace + Face Mesh) e mãos (BlazePalm + Hand Landmark).
-    /// </summary>
+    
     public sealed class LandmarkDetectionService
     {
         private readonly ModelLoader _models;

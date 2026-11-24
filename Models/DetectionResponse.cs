@@ -5,12 +5,11 @@ namespace PerceptAI.API.Models
 {
     public class DetectionResponse
     {
-        // Campos preservados para o app mobile/web existente.
+        
         public string Emotion { get; set; } = string.Empty;
         public float Confidence { get; set; }
         public DateTime Timestamp { get; set; }
 
-        // Detalhamento do pipeline rigoroso.
         public string? EstadoFisiologico { get; set; }
         public string? EstadoEmocional { get; set; }
         public float? ConfiancaFisiologica { get; set; }

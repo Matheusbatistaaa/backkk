@@ -7,15 +7,13 @@ using PerceptAI.API.Models;
 
 namespace PerceptAI.API.ML
 {
-    /// <summary>
-    /// BlazeFace short-range (entrada 128x128 em [-1,1]) com decode SSD e NMS ponderado.
-    /// </summary>
+    
     public sealed class BlazeFaceDetector
     {
         public const int InputSize = 128;
         private const int NumKeypoints = 6;
-        private const int RegressorStride = 4 + 2 * NumKeypoints; // 16 valores por âncora
-        private const int RowWidth = 5 + 2 * NumKeypoints;        // score + caixa + keypoints
+        private const int RegressorStride = 4 + 2 * NumKeypoints; 
+        private const int RowWidth = 5 + 2 * NumKeypoints;        
 
         private readonly InferenceSession _session;
         private readonly string _inputName;

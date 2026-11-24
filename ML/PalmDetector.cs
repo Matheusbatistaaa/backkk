@@ -6,7 +6,7 @@ using PerceptAI.API.Models;
 
 namespace PerceptAI.API.ML
 {
-    /// <summary>Palma detectada: caixa quadrada, punho e MCP do dedo médio (em pixels).</summary>
+    
     public sealed class PalmDetection
     {
         public float Score { get; init; }
@@ -17,9 +17,6 @@ namespace PerceptAI.API.ML
         public Point2 MiddleMcp { get; init; }
     }
 
-    /// <summary>
-    /// BlazePalm full (192x192, letterbox, RGB [0,1]) com decode SSD e NMS ponderado.
-    /// </summary>
     public sealed class PalmDetector
     {
         public const int InputSize = 192;
