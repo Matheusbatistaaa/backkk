@@ -63,7 +63,10 @@ namespace PerceptAI.API.Controllers
 
             try
             {
-                DetectionOutcome outcome = _pipeline.Analyze(request.Image);
+                // O repouso facial é aprendido por leito/paciente (sem UI) para medir
+                // medo e tristeza como desvio do próprio rosto.
+                string sessionKey = temInternacao ? request.InternacaoId! : request.PatientId!;
+                DetectionOutcome outcome = _pipeline.Analyze(request.Image, false, sessionKey);
                 EmotionDecision decision = outcome.Decision;
 
                 bool indeterminate = decision.EstadoPrincipal == "indeterminado";

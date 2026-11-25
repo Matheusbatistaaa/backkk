@@ -27,6 +27,7 @@ namespace PerceptAI.API.Services
         private readonly EmotionRuleEngine _rules;
         private readonly EmotionDetectionService _classifier;
         private readonly ImagePreprocessingService _preprocessing;
+        private readonly ExpressionBaselineService _baselines;
         private readonly EmotionRuleOptions _options;
         private readonly ILogger<DetectionPipelineService> _logger;
 
@@ -36,6 +37,7 @@ namespace PerceptAI.API.Services
             EmotionRuleEngine rules,
             EmotionDetectionService classifier,
             ImagePreprocessingService preprocessing,
+            ExpressionBaselineService baselines,
             EmotionRuleOptions options,
             ILogger<DetectionPipelineService> logger)
         {
@@ -44,6 +46,7 @@ namespace PerceptAI.API.Services
             _rules = rules;
             _classifier = classifier;
             _preprocessing = preprocessing;
+            _baselines = baselines;
             _options = options;
             _logger = logger;
         }
@@ -52,7 +55,7 @@ namespace PerceptAI.API.Services
 
         public string PipelineName => _landmarks.Available ? "landmarks" : "classificador";
 
-        public DetectionOutcome Analyze(string base64Image, bool includeClassifierProbabilities = false)
+        public DetectionOutcome Analyze(string base64Image, bool includeClassifierProbabilities = false, string? sessionKey = null)
         {
             ImageRgb24 image;
             try
@@ -95,13 +98,62 @@ namespace PerceptAI.API.Services
             }
 
             FacialMetrics metrics = _metrics.Compute(image, frame.Face, frame.Hands);
-            EmotionDecision decision = _rules.Evaluate(metrics);
+            // Aprende o repouso ANTES de classificar: o quadro que fecha o aquecimento
+            // já usa a referência recém-congelada (sem piscar uma expressão no rosto neutro).
+            _baselines.Observe(sessionKey, metrics);
+            ExpressionBaseline? baseline = _baselines.Get(sessionKey);
+            EmotionDecision decision = _rules.Evaluate(metrics, baseline);
+
+            // Medo e tristeza são relativos ao repouso. Enquanto os primeiros quadros
+            // não definem esse repouso, os limiares absolutos podem acender por engano
+            // em rostos naturalmente expressivos; devolve neutro até a referência fechar.
+            if (_baselines.IsWarmingUp(sessionKey) && decision.EstadoPrincipal == "acordado"
+                && decision.EstadoEmocional is "tristeza" or "medo")
+            {
+                decision = new EmotionDecision
+                {
+                    EstadoPrincipal = decision.EstadoPrincipal,
+                    EstadoFisiologico = decision.EstadoFisiologico,
+                    ConfiancaFisiologica = decision.ConfiancaFisiologica,
+                    EstadoEmocional = "neutro",
+                    EmocaoSecundaria = "neutro",
+                    ConfiancaEmocional = 0.5f,
+                    Fonte = decision.Fonte,
+                    Metricas = decision.Metricas,
+                    Regras = decision.Regras,
+                    Observacoes = decision.Observacoes
+                        .Append("Repouso facial em aprendizado (primeiros quadros): medo e tristeza entram em vigor em seguida.")
+                        .ToArray()
+                };
+            }
 
             if (frame.FacesDetected > 1)
             {
                 decision = AppendObservation(
                     decision,
                     $"{frame.FacesDetected} rostos detectados; analisado o de maior área.");
+            }
+
+            _logger.LogInformation(
+                "Métricas: inclinação sobrancelha={Slant:F3} elevação={Raise:F2} boca(sup={SagU:F3}, centro={SagS:F3}, interna={SagI:F3}) EAR={Ear:F2} | sessão={Session} repouso={Repouso}",
+                metrics.BrowSlantRatio,
+                metrics.BrowRaiseRatio,
+                metrics.MouthCornerSagUpperLip,
+                metrics.MouthCornerSagRatio,
+                metrics.MouthCornerSagInner,
+                metrics.EyeAspectRatio,
+                sessionKey ?? "-",
+                baseline != null ? "congelado" : _baselines.IsWarmingUp(sessionKey) ? "aprendendo" : "ausente");
+
+            if (baseline != null)
+            {
+                _logger.LogInformation(
+                    "Repouso do leito: inclinação={Slant:F3} elevação={Raise:F2} boca(centro={SagS:F3}, interna={SagI:F3}) EAR={Ear:F3}",
+                    baseline.BrowSlant,
+                    baseline.BrowRaise,
+                    baseline.SagSeam,
+                    baseline.SagInner,
+                    baseline.Ear);
             }
 
             _logger.LogInformation(

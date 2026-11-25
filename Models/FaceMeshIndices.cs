@@ -22,9 +22,11 @@ namespace PerceptAI.API.Models
         public const int LeftEyeUpper2 = 385;
         public const int LeftEyeLower2 = 380;
 
-        // Sobrancelhas (ponto interno, junto à glabela)
+        // Sobrancelhas (ponto interno junto à glabela e ponta externa)
         public const int RightBrowInner = 107;
         public const int LeftBrowInner = 336;
+        public const int RightBrowOuter = 70;
+        public const int LeftBrowOuter = 300;
 
         // Boca externa e interna
         public const int MouthRightCorner = 61;

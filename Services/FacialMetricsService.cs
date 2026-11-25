@@ -45,25 +45,36 @@ namespace PerceptAI.API.Services
             float mar = innerMouthWidth > 1e-3f ? mouthOpening / innerMouthWidth : 0f;
             float openRatio = faceHeight > 1e-3f ? mouthOpening / faceHeight : 0f;
 
-            float cornerSag = 0f;
+            float cornerSag = 0f, sagRightCorner = 0f, sagLeftCorner = 0f;
+            float cornerSagUpperLip = 0f, cornerSagInner = 0f;
             if (mouthWidth > 1e-3f)
             {
-                // Referência na comissura interna (canto interno dos lábios): ela fica
-                // presa à "linha da boca" e NÃO desce quando a mandíbula abre, então
-                // bocejo/grito não viram falsa tristeza. Cantos externos abaixo da
-                // comissura => positivo; acima (sorriso) => negativo.
+                // Referência principal: LINHA DA BOCA no ponto médio entre o centro do lábio
+                // superior interno (13) e o inferior interno (14). Cantos abaixo => queda.
+                float seamY = (p[FaceMeshIndices.UpperLipInner].Y + p[FaceMeshIndices.LowerLipInner].Y) / 2f;
+                sagRightCorner = (p[FaceMeshIndices.MouthRightCorner].Y - seamY) / mouthWidth;
+                sagLeftCorner = (p[FaceMeshIndices.MouthLeftCorner].Y - seamY) / mouthWidth;
+                cornerSag = (sagRightCorner + sagLeftCorner) / 2f;
+
+                // Referências alternativas mantidas para diagnóstico/calibração:
+                // lábio superior (13) — fixo quando a mandíbula abre; comissura interna (78/308).
                 float cornerY = (p[FaceMeshIndices.MouthRightCorner].Y + p[FaceMeshIndices.MouthLeftCorner].Y) / 2f;
                 float innerCornerY = (p[FaceMeshIndices.MouthRightInner].Y + p[FaceMeshIndices.MouthLeftInner].Y) / 2f;
-                // Eixo Y cresce para baixo: cantos abaixo da comissura => positivo.
-                cornerSag = (cornerY - innerCornerY) / mouthWidth;
+                cornerSagUpperLip = (cornerY - p[FaceMeshIndices.UpperLipInner].Y) / mouthWidth;
+                cornerSagInner = (cornerY - innerCornerY) / mouthWidth;
             }
+
+            float mouthWidthRatio = faceWidth > 1e-3f ? mouthWidth / faceWidth : 0f;
 
             // Referência na linha dos quatro cantos dos olhos: estável à pálpebra,
             // diferente de usar o ponto superior do olho (que sobe em olhos arregalados).
             float eyeLineY = (p[FaceMeshIndices.RightEyeOuter].Y + p[FaceMeshIndices.RightEyeInner].Y
                             + p[FaceMeshIndices.LeftEyeOuter].Y + p[FaceMeshIndices.LeftEyeInner].Y) / 4f;
             float browY = (p[FaceMeshIndices.RightBrowInner].Y + p[FaceMeshIndices.LeftBrowInner].Y) / 2f;
+            float browOuterY = (p[FaceMeshIndices.RightBrowOuter].Y + p[FaceMeshIndices.LeftBrowOuter].Y) / 2f;
             float browRaise = (eyeLineY - browY) / iod;
+            // AU1 (canto interno levantado = tristeza) vs AU4 (canto interno baixo = dor).
+            float browSlant = (browOuterY - browY) / iod;
 
             var (teethRatio, teethPixels, mouthPixels) = AnalyzeTeeth(image, p, notes);
             var (handPoints, handDistance, handDetected) = AnalyzeHands(p, hands, mouthWidth, iod);
@@ -90,15 +101,23 @@ namespace PerceptAI.API.Services
                             && rightEar >= _o.MinWideEyeSideEar
                             && leftEar >= _o.MinWideEyeSideEar;
 
+            float squintMaxEar = MathF.Max(rightEar, leftEar);
+            // Aperto de dor: média abaixo do limiar e nenhum olho "em repouso" (assimetria tolerada).
+            bool eyesPainSquinted = !eyesClosed && !eyesAlmostClosed
+                                    && ear <= _o.PainEyeEar
+                                    && squintMaxEar <= _o.PainEyeSideMaxEar;
+            // Mandíbula travada usa o olho MAIS ABERTO: o aperto precisa ser forte nos dois olhos.
+            bool eyesTightSqueezed = squintMaxEar <= _o.PainClenchedEyeEar;
+
             if (rightClosed != leftClosed)
                 notes.Add($"Olhos assimétricos (direito={rightEar:F3}, esquerdo={leftEar:F3}); estado de vigília indeterminado.");
 
             bool yawning = mar >= _o.YawnMouthAspectRatio && openRatio >= _o.YawnOpenRatio;
-            // A referência na comissura interna é estável à abertura da boca, então o
-            // frown não precisa mais de trava por MAR (bocejo/grito não o disparam).
-            bool frowning = cornerSag >= _o.FrownSagRatio;
-            // Cantos acima da comissura: sorriso. Impede que sorriso com dentes vire "dor".
-            bool smiling = cornerSag <= -_o.SmileCornerLiftRatio;
+            // Referência no lábio superior (13): estável à abertura da mandíbula (o lábio
+            // inferior é que desce), então sorriso/tristeza não são confundidos com boca aberta.
+            bool frowning = cornerSagUpperLip >= _o.FrownSagRatio;
+            // Cantos acima do lábio superior: sorriso. Impede que sorriso com dentes vire "dor".
+            bool smiling = cornerSagUpperLip <= -_o.SmileCornerLiftRatio;
             bool browsRaised = browRaise >= _o.BrowRaiseRatio;
             bool teethVisible = teethRatio >= _o.TeethPixelRatio && teethPixels >= _o.MinTeethPixels;
             bool teethClenched = teethVisible && mar <= _o.TeethMaxMouthAspectRatio;
@@ -120,8 +139,14 @@ namespace PerceptAI.API.Services
                 MouthOpenRatio = openRatio,
                 MouthOpeningPx = mouthOpening,
                 MouthWidth = mouthWidth,
+                MouthWidthRatio = mouthWidthRatio,
                 MouthCornerSagRatio = cornerSag,
+                MouthCornerSagLeft = sagLeftCorner,
+                MouthCornerSagRight = sagRightCorner,
+                MouthCornerSagUpperLip = cornerSagUpperLip,
+                MouthCornerSagInner = cornerSagInner,
                 BrowRaiseRatio = browRaise,
+                BrowSlantRatio = browSlant,
                 TeethRatio = teethRatio,
                 TeethPixels = teethPixels,
                 MouthRegionPixels = mouthPixels,
@@ -132,6 +157,9 @@ namespace PerceptAI.API.Services
                 LeftEyeClosed = leftClosed,
                 EyesClosed = eyesClosed,
                 EyesAlmostClosed = eyesAlmostClosed,
+                EyesPainSquinted = eyesPainSquinted,
+                EyesTightSqueezed = eyesTightSqueezed,
+                EyeSquintMaxEar = squintMaxEar,
                 EyesNarrowed = eyesNarrowed,
                 EyesOpen = eyesOpen,
                 EyesWide = eyesWide,
@@ -194,11 +222,11 @@ namespace PerceptAI.API.Services
                     int min = Math.Min(r, Math.Min(g, b));
                     float saturation = max > 0 ? (max - min) / (float)max : 0f;
 
-                    if (max >= 130 && saturation <= 0.35f) teeth++;
+                    if (max >= 115 && saturation <= 0.40f) teeth++;
                 }
             }
 
-            if (region < 30)
+            if (region < 20)
             {
                 notes.Add("Região da boca pequena para análise de dentes.");
                 return (0f, teeth, region);

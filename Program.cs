@@ -13,9 +13,9 @@ using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Render/Railway injetam PORT; localmente o padrão é 5198.
+// API acessível apenas na própria máquina: o front (Vite) faz o proxy /api.
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5198";
-builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
 
 // Carrega .env local e mapeia para SupabaseSettings
 var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
@@ -99,9 +99,11 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<EmotionDetectionService>();
 builder.Services.AddSingleton<FacialMetricsService>();
 builder.Services.AddSingleton<EmotionRuleEngine>();
+builder.Services.AddSingleton<ExpressionBaselineService>();
 builder.Services.AddSingleton<LandmarkDetectionService>();
 builder.Services.AddSingleton<DetectionPipelineService>();
 builder.Services.AddScoped<SupabaseService>();
+builder.Services.AddSingleton<LocalCadastroService>();
 
 // ------------------------------------------------------------------
 // HttpClient para Supabase (pré-configurado)
@@ -120,7 +122,7 @@ builder.Services.AddHttpClient("supabase", (sp, client) =>
 
 var app = builder.Build();
 
-app.Logger.LogInformation("PerceptAI ouvindo em http://0.0.0.0:{Port}", port);
+app.Logger.LogInformation("PerceptAI ouvindo em http://127.0.0.1:{Port} (local)", port);
 app.Logger.LogInformation("Pipeline de detecção: {Pipeline}",
     app.Services.GetRequiredService<ModelLoader>().HasLandmarkPipeline ? "landmarks" : "classificador (fallback)");
 
