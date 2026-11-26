@@ -21,12 +21,12 @@ COPY --from=build /app/publish .
 ARG GITHUB_TOKEN
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
     mkdir -p /ML /app/ML && \
-    curl -fL -H "Authorization: token ${GITHUB_TOKEN}" \
-         "https://githubusercontent.com" \
-         -o /ML/model.onnx && \
+    URL=$(printf "https://%s/%s/%s/%s/%s" "://githubusercontent.com" "media" "Matheusbatistaaa/backkk" "main" "ML/model.onnx") && \
+    curl -fL -H "Authorization: token ${GITHUB_TOKEN}" "$URL" -o /ML/model.onnx && \
     ln -s /ML/model.onnx /app/ML/model.onnx && \
     apt-get purge -y --auto-remove curl && \
     rm -rf /var/lib/apt/lists/*
+
 
 # Expose port (Render sets PORT env var)
 EXPOSE 8080
