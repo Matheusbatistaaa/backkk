@@ -35,11 +35,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
          -H "Accept: application/vnd.github.raw+json" \
          "https://${API}/repos/Matheusbatistaaa/backkk/contents/ML/perceptai_emotion.onnx?ref=main" \
          -o /app/ML/perceptai_emotion.onnx && \
+    curl -fL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+         -H "Accept: application/vnd.github.raw+json" \
+         "https://${API}/repos/Matheusbatistaaa/backkk/contents/ML/perceptai_mobilenetv2.onnx.data?ref=main" \
+         -o /app/ML/perceptai_mobilenetv2.onnx.data && \
     apt-get purge -y --auto-remove curl && \
     rm -rf /var/lib/apt/lists/*
 
 # Expose port (Render sets PORT env var)
-EXPOSE 8080
+ENV ASPNETCORE_URLS=http://0.0.0
+EXPOSE 10000
 
 # Start
 ENTRYPOINT ["dotnet", "PerceptAI.API.dll"]
