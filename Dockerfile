@@ -21,17 +21,20 @@ WORKDIR /app
 # Copy published app
 COPY --from=build /app/publish .
 
-# Download ML model from private GitHub repo (LFS)
+# Download ML models from private GitHub repo (LFS)
 ARG GITHUB_TOKEN
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
-    mkdir -p /ML /app/ML && \
+    mkdir -p /app/ML && \
     SUB="api" && \
     API="${SUB}.github.com" && \
     curl -fL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
          -H "Accept: application/vnd.github.raw+json" \
-         "https://${API}/repos/Matheusbatistaaa/backkk/contents/ML/model.onnx?ref=main" \
-         -o /ML/model.onnx && \
-    ln -s /ML/model.onnx /app/ML/model.onnx && \
+         "https://${API}/repos/Matheusbatistaaa/backkk/contents/ML/perceptai_physio.onnx?ref=main" \
+         -o /app/ML/perceptai_physio.onnx && \
+    curl -fL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+         -H "Accept: application/vnd.github.raw+json" \
+         "https://${API}/repos/Matheusbatistaaa/backkk/contents/ML/perceptai_emotion.onnx?ref=main" \
+         -o /app/ML/perceptai_emotion.onnx && \
     apt-get purge -y --auto-remove curl && \
     rm -rf /var/lib/apt/lists/*
 
