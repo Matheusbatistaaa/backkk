@@ -42,8 +42,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
     apt-get purge -y --auto-remove curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Expose port (Render sets PORT env var)
-ENV ASPNETCORE_URLS=http://0.0.0
+# Render sets PORT; Program.cs reads it and binds to 0.0.0.0.
+ENV PORT=10000
+ENV ASPNETCORE_ENVIRONMENT=Production
 EXPOSE 10000
 
 # Start

@@ -52,11 +52,25 @@ builder.Services.Configure<SupabaseSettings>(builder.Configuration.GetSection(Su
 // ------------------------------------------------------------------
 // CORS
 // ------------------------------------------------------------------
+var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"] ?? "http://localhost:3000";
+var allowedOrigins = configuredOrigins
+    .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+    .Select(origin => origin.TrimEnd('/'))
+    .ToList();
+
+var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL");
+if (!string.IsNullOrWhiteSpace(frontendUrl))
+{
+    allowedOrigins.AddRange(frontendUrl
+        .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .Select(origin => origin.TrimEnd('/')));
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowAll", policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins(allowedOrigins.Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -122,7 +136,7 @@ builder.Services.AddHttpClient("supabase", (sp, client) =>
 
 var app = builder.Build();
 
-app.Logger.LogInformation("PerceptAI ouvindo em http://127.0.0.1:{Port} (local)", port);
+app.Logger.LogInformation("PerceptAI ouvindo em http://0.0.0.0:{Port}", port);
 app.Logger.LogInformation("Pipeline de detecção: {Pipeline}",
     app.Services.GetRequiredService<ModelLoader>().HasLandmarkPipeline ? "landmarks" : "classificador (fallback)");
 
@@ -137,7 +151,7 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors("AllowAll");
+app.UseCors("AllowFrontend");
 app.UseAuthorization();
 
 // Endpoint de depuração local – executa uma imagem fixa pelo pipeline completo

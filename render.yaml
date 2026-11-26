@@ -13,6 +13,10 @@ services:
         sync: false
       - key: SupabaseSettings__ServiceRoleKey
         sync: false
+      - key: FRONTEND_URL
+        value: https://percept-ai-front-tcc.vercel.app
+      - key: GITHUB_TOKEN
+        sync: false
       - key: DetectionSettings__Threshold
         value: "0.75"
     healthCheckPath: /api/detection/health
