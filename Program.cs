@@ -14,8 +14,8 @@ using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 
 // API acessível apenas na própria máquina: o front (Vite) faz o proxy /api.
-var port = Environment.GetEnvironmentVariable("PORT") ?? "5198";
-builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
+var port = Environment.GetEnvironmentVariable("PORT") ?? "10000";
+builder.WebHost.UseUrls($"http://0.0.0:{port}");
 
 // Carrega .env local e mapeia para SupabaseSettings
 var envPath = Path.Combine(Directory.GetCurrentDirectory(), ".env");
