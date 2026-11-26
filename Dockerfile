@@ -25,9 +25,10 @@ COPY --from=build /app/publish .
 ARG GITHUB_TOKEN
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \
     mkdir -p /ML /app/ML && \
-    SUB="media" && DOM="githubusercontent.com" && \
-    curl -fL -H "Authorization: token ${GITHUB_TOKEN}" \
-         "https://${SUB}.${DOM}/media/Matheusbatistaaa/backkk/main/ML/model.onnx" \
+    API="://github.com" && \
+    curl -fL -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+         -H "Accept: application/vnd.github.raw+json" \
+         "https://${API}/repos/Matheusbatistaaa/backkk/contents/ML/model.onnx?ref=main" \
          -o /ML/model.onnx && \
     ln -s /ML/model.onnx /app/ML/model.onnx && \
     apt-get purge -y --auto-remove curl && \
