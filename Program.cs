@@ -52,7 +52,8 @@ builder.Services.Configure<SupabaseSettings>(builder.Configuration.GetSection(Su
 // ------------------------------------------------------------------
 // CORS
 // ------------------------------------------------------------------
-var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"] ?? "http://localhost:3000";
+var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"]
+    ?? "http://localhost:3000,https://percept-ai-front-tcc.vercel.app";
 var allowedOrigins = configuredOrigins
     .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
     .Select(origin => origin.TrimEnd('/'))
