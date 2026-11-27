@@ -34,8 +34,8 @@ namespace PerceptAI.API.Services
         // DTO interno para inserção na tabela `expressoes_faciais`
         // Campos confirmados pelo schema Supabase: internacao_id é UUID string
         private record ExpressaoRow(
-            string internacao_id, // UUID string
-            string mood,          // ENUM: dor|medo|tristeza|enjoo|sono|dormindo|acordado|neutro
+            string internacao_id, // INT no banco
+            string emocao,        // ENUM: dor|medo|tristeza|enjoo|sono|dormindo|acordado|neutro
             int confianca,        // 0-100 (percentual inteiro)
             string timestamp); // timestamp ISO 8601
 
@@ -114,7 +114,7 @@ namespace PerceptAI.API.Services
 
             var row = new ExpressaoRow(
                 internacao_id: internacaoId,
-                mood:          mood,
+                emocao:        mood,
                 confianca:     confiancaPerc,
                 timestamp:     DateTime.UtcNow.ToString("o"));
 
