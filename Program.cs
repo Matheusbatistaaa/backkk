@@ -52,26 +52,12 @@ builder.Services.Configure<SupabaseSettings>(builder.Configuration.GetSection(Su
 // ------------------------------------------------------------------
 // CORS
 // ------------------------------------------------------------------
-var configuredOrigins = builder.Configuration["Cors:AllowedOrigins"]
-    ?? "http://localhost:3000,https://percept-ai-front-tcc.vercel.app";
-var allowedOrigins = configuredOrigins
-    .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-    .Select(origin => origin.TrimEnd('/'))
-    .ToList();
-
-var frontendUrl = Environment.GetEnvironmentVariable("FRONTEND_URL");
-if (!string.IsNullOrWhiteSpace(frontendUrl))
-{
-    allowedOrigins.AddRange(frontendUrl
-        .Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .Select(origin => origin.TrimEnd('/')));
-}
-
+// API sem cookies/sessão: qualquer origem libera previews e aliases do Vercel sem CORS.
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins(allowedOrigins.Distinct(StringComparer.OrdinalIgnoreCase).ToArray())
+        policy.AllowAnyOrigin()
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
